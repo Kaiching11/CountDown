@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>倒數計時</title>
+  <meta name="description" content="簡潔漂亮的倒數計時頁面，支援網址分享與本地儲存。" />
+  <style>
+    :root {
+      --bg1: #0f172a; /* slate-900 */
+      --bg2: #1e293b; /* slate-800 */
+      --fg: #e2e8f0;  /* slate-200 */
+      --muted: #94a3b8; /* slate-400 */
+      --accent: #38bdf8; /* sky-400 */
+      --card: rgba(255,255,255,0.08);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      color: var(--fg);
+      background: radial-gradient(1200px 600px at 20% 10%, #0b1220 0%, transparent 60%),
+                  radial-gradient(900px 600px at 100% 0%, #0a2233 0%, transparent 50%),
+                  linear-gradient(160deg, var(--bg1), var(--bg2));
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      display: grid; place-items: center; padding: 24px;
+    }
+
+    .app { width: 100%; max-width: 980px; display: grid; gap: 20px; }
+
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    header h1 { margin: 0; font-size: clamp(22px, 4vw, 36px); letter-spacing: .5px; }
+
+    .card { background: var(--card); border: 1px solid rgba(255,255,255,.08); border-radius: var(--radius); box-shadow: var(--shadow); }
+
+    .controls { display: grid; grid-template-columns: 1fr; gap: 14px; padding: 16px; }
+    @media (min-width: 720px){
+      .controls { grid-template-columns: 1.2fr 1.2fr 1fr auto auto; align-items: end; }
+    }
+
+    label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+    input[type="text"], input[type="datetime-local"] {
+      width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.25); color: var(--fg); outline: none;
+    }
+    input::placeholder { color: #94a3b888; }
+
+    .btn {
+      padding: 12px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2);
+      background: rgba(56, 189, 248, .12); color: var(--fg); cursor: pointer; white-space: nowrap;
+      transition: transform .06s ease, background .2s ease;
+    }
+    .btn.primary { background: linear-gradient(180deg, #38bdf8, #0284c7); border: none; box-shadow: 0 8px 20px rgba(56,189,248,.35); }
+    .btn:hover { transform: translateY(-1px); }
+
+    .timer { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 24px; }
+    @media (max-width: 520px){ .timer { grid-template-columns: repeat(2, 1fr); } }
+
+    .unit { text-align: center; padding: 18px 14px; border-radius: 18px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
+    .value { font-variant-numeric: tabular-nums; font-weight: 800; font-size: clamp(28px, 8vw, 64px); line-height: 1; }
+    .label { color: var(--muted); margin-top: 8px; font-size: 12px; letter-spacing: .4px; text-transform: uppercase; }
+
+    .subtitle { color: var(--muted); font-size: 14px; margin: -6px 0 2px; }
+
+    footer { text-align: center; color: var(--muted); font-size: 12px; padding: 10px; }
+    a, button.link { color: #7dd3fc; text-decoration: none; }
+    .row { display: grid; gap: 8px; }
+
+    .bad { color: #fca5a5; }
+    .good { color: #86efac; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1 id="pageTitle">倒數計時</h1>
+      <button id="shareBtn" class="btn" title="把目前設定分享為網址">分享網址</button>
+    </header>
+
+    <p id="subtitle" class="subtitle"></p>
+
+    <section class="card controls">
+      <div class="row">
+        <label for="title">標題</label>
+        <input id="title" type="text" placeholder="例如：距離九寨溝之旅 🏔️ 出發" />
+      </div>
+      <div class="row">
+        <label for="target">目標時間（依你本機時區）</label>
+        <input id="target" type="datetime-local" />
+      </div>
+      <div class="row">
+        <label>&nbsp;</label>
+        <button id="nowPlus" class="btn" title="快速設定 30 天後">+ 30 天</button>
+      </div>
+      <button id="startBtn" class="btn primary">開始 / 更新</button>
+      <button id="resetBtn" class="btn">重設</button>
+    </section>
+
+    <section class="card timer" aria-live="polite" aria-atomic="true">
+      <div class="unit"><div class="value" id="days">00</div><div class="label">天</div></div>
+      <div class="unit"><div class="value" id="hours">00</div><div class="label">時</div></div>
+      <div class="unit"><div class="value" id="minutes">00</div><div class="label">分</div></div>
+      <div class="unit"><div class="value" id="seconds">00</div><div class="label">秒</div></div>
+    </section>
+
+    <footer>
+      <span id="status"></span>
+      <div style="margin-top:6px">
+        <button class="link" id="clearLS" title="清除本機儲存">清除本機儲存</button>
+        · <a href="#" id="exampleLink">載入範例</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // ===== 小工具 =====
+    const qs = (s, el=document) => el.querySelector(s);
+    const fmt2 = n => String(Math.floor(Math.abs(n))).padStart(2, '0');
+    const toLocalInputValue = (date) => {
+      // 產生適用於 input[type=datetime-local] 的值
+      const pad = (n) => String(n).padStart(2,'0');
+      return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    };
+
+    function parseFromParam(v){
+      // 支援 ISO 8601（含時區）或不含秒的 datetime-local 樣式
+      if(!v) return null;
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    function setTitle(t){
+      const title = t && t.trim() ? t.trim() : '倒數計時';
+      document.title = title;
+      qs('#pageTitle').textContent = title;
+    }
+
+    // ===== 狀態 =====
+    const st = {
+      title: localStorage.getItem('ct_title') || '',
+      targetISO: localStorage.getItem('ct_target') || '',
+      timer: null
+    };
+
+    // ===== 元件 =====
+    const elTitle = qs('#title');
+    const elTarget = qs('#target');
+    const elStart = qs('#startBtn');
+    const elReset = qs('#resetBtn');
+    const elPlus = qs('#nowPlus');
+    const elStatus = qs('#status');
+    const btnShare = qs('#shareBtn');
+
+    const dEl = {
+      days: qs('#days'), hours: qs('#hours'), minutes: qs('#minutes'), seconds: qs('#seconds')
+    };
+
+    // ===== 初始化：讀取網址參數或 LocalStorage =====
+    (function init(){
+      const url = new URL(location.href);
+      const p = url.searchParams;
+      const pTitle = p.get('title');
+      const pTarget = p.get('target');
+
+      // 允許以網址參數覆蓋本地資料
+      if(pTitle) st.title = pTitle;
+      if(pTarget) st.targetISO = pTarget;
+
+      setTitle(st.title);
+      elTitle.value = st.title;
+
+      if(st.targetISO){
+        const d = parseFromParam(st.targetISO);
+        if(d){ elTarget.value = toLocalInputValue(d); }
+      }
+
+      updateSubtitle();
+      startTicker();
+
+      // 範例連結
+      qs('#exampleLink').addEventListener('click', (e)=>{
+        e.preventDefault();
+        const t = new Date();
+        t.setDate(t.getDate()+100);
+        elTitle.value = '距離半馬 PB 💪';
+        elTarget.value = toLocalInputValue(t);
+        elStart.click();
+      });
+    })();
+
+    function updateSubtitle(){
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '本機時區';
+      qs('#subtitle').textContent = `你的時區：${tz}`;
+    }
+
+    function startTicker(){
+      clearInterval(st.timer);
+      tick();
+      st.timer = setInterval(tick, 1000);
+    }
+
+    function tick(){
+      const now = new Date();
+      const targetVal = elTarget.value || st.targetISO;
+      const t = parseFromParam(targetVal);
+
+      if(!t){
+        setDigits(0,0,0,0);
+        elStatus.innerHTML = '<span class="bad">尚未設定目標時間</span>';
+        return;
+      }
+
+      const diff = t.getTime() - now.getTime();
+      if (isNaN(diff)) {
+        elStatus.innerHTML = '<span class="bad">時間格式不正確</span>';
+        return;
+      }
+
+      if(diff <= 0){
+        setDigits(0,0,0,0);
+        elStatus.innerHTML = '<span class="good">🎉 已到達目標時間！</span>';
+        return;
+      }
+
+      const sec = Math.floor(diff/1000);
+      const days = Math.floor(sec / 86400);
+      const hours = Math.floor((sec % 86400) / 3600);
+      const minutes = Math.floor((sec % 3600) / 60);
+      const seconds = sec % 60;
+      setDigits(days, hours, minutes, seconds);
+
+      const display = `${days} 天 ${fmt2(hours)}:${fmt2(minutes)}:${fmt2(seconds)}`;
+      elStatus.textContent = `剩餘：${display}`;
+    }
+
+    function setDigits(d,h,m,s){
+      dEl.days.textContent = String(d).padStart(2,'0');
+      dEl.hours.textContent = fmt2(h);
+      dEl.minutes.textContent = fmt2(m);
+      dEl.seconds.textContent = fmt2(s);
+    }
+
+    // ===== 事件 =====
+    elStart.addEventListener('click', () => {
+      st.title = elTitle.value.trim();
+      setTitle(st.title);
+
+      // 將 input 的本地時間轉成 ISO（保留本地偏移）
+      const v = elTarget.value;
+      if(v){
+        const d = new Date(v);
+        st.targetISO = d.toISOString(); // 以 ISO 儲存，方便跨裝置
+      }
+
+      localStorage.setItem('ct_title', st.title);
+      localStorage.setItem('ct_target', st.targetISO);
+      startTicker();
+    });
+
+    elReset.addEventListener('click', () => {
+      elTitle.value = '';
+      elTarget.value = '';
+      st.title = '';
+      st.targetISO = '';
+      localStorage.removeItem('ct_title');
+      localStorage.removeItem('ct_target');
+      setTitle('倒數計時');
+      tick();
+    });
+
+    elPlus.addEventListener('click', () => {
+      const base = elTarget.value ? new Date(elTarget.value) : new Date();
+      base.setDate(base.getDate() + 30);
+      elTarget.value = toLocalInputValue(base);
+    });
+
+    btnShare.addEventListener('click', async () => {
+      const url = new URL(location.href);
+      const p = url.searchParams;
+      if(st.title) p.set('title', st.title);
+      if(st.targetISO) p.set('target', st.targetISO);
+      else if(elTarget.value){ p.set('target', new Date(elTarget.value).toISOString()); }
+      url.search = p.toString();
+      const shareURL = url.toString();
+
+      if(navigator.clipboard){
+        try {
+          await navigator.clipboard.writeText(shareURL);
+          notify('已複製分享連結到剪貼簿');
+        } catch(e){
+          alert('請手動複製網址：\n' + shareURL);
+        }
+      } else {
+        alert('請手動複製網址：\n' + shareURL);
+      }
+    });
+
+    qs('#clearLS').addEventListener('click', () => {
+      localStorage.removeItem('ct_title');
+      localStorage.removeItem('ct_target');
+      notify('已清除本機儲存');
+    });
+
+    function notify(msg){
+      const bar = document.createElement('div');
+      bar.textContent = msg;
+      bar.style.position = 'fixed';
+      bar.style.left = '50%';
+      bar.style.bottom = '24px';
+      bar.style.transform = 'translateX(-50%)';
+      bar.style.background = 'rgba(15,23,42,.9)';
+      bar.style.border = '1px solid rgba(255,255,255,.15)';
+      bar.style.color = 'white';
+      bar.style.padding = '10px 14px';
+      bar.style.borderRadius = '12px';
+      bar.style.boxShadow = '0 10px 30px rgba(0,0,0,.35)';
+      document.body.appendChild(bar);
+      setTimeout(()=>bar.remove(), 1500);
+    }
+  </script>
+</body>
+</html>
